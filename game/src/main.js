@@ -115,6 +115,24 @@ function runGame() {
     if (events & EVENT_FIRE) audio.shoot();
   }
 
+  /** The nearest live creature to the ship, for touch auto-aim. */
+  function nearestEnemy() {
+    const p = world.state.player;
+    let best = null;
+    let bestD = Infinity;
+    for (const e of world.state.enemies) {
+      if (!e.active) continue;
+      const dx = e.x - p.x;
+      const dy = e.y - p.y;
+      const d = dx * dx + dy * dy;
+      if (d < bestD) {
+        bestD = d;
+        best = e;
+      }
+    }
+    return best;
+  }
+
   function handleActions() {
     // A click on the mute button toggles sound and is not a confirm or a shot.
     const clicks = input.takeClicks();
@@ -163,12 +181,27 @@ function runGame() {
     }
     const move = input.move();
     const aim = input.aim();
+    // Touch: the ship fires on its own and aims at the nearest creature.
+    let aimX = aim.x;
+    let aimY = aim.y;
+    let fire = input.firing() || false;
+    if (input.isTouchMode()) {
+      const target = nearestEnemy();
+      if (target) {
+        aimX = target.x;
+        aimY = target.y;
+      } else {
+        aimX = world.state.player.x;
+        aimY = world.state.player.y - 100;
+      }
+      fire = true;
+    }
     const events = world.step(STEP, {
       mx: move.x,
       my: move.y,
-      aimX: aim.x,
-      aimY: aim.y,
-      fire: input.firing() || false,
+      aimX,
+      aimY,
+      fire,
       dash: input.takeDash(),
       hasMouse: aim.hasMouse,
     }, false);
@@ -191,7 +224,7 @@ function runGame() {
     } else {
       accumulator = 0;
     }
-    renderer.draw(world.state, screen, { best, muted: audio.isMuted() });
+    renderer.draw(world.state, screen, { best, muted: audio.isMuted(), touch: input.touch() });
   }
 
   // Leaving the tab pauses a running game rather than letting creatures close in unseen.

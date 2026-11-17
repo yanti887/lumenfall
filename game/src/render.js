@@ -421,7 +421,7 @@ export function createRenderer(canvas) {
     context.globalAlpha = 1;
   }
 
-  function drawHud(state, screen, muted) {
+  function drawHud(state, screen, muted, ui) {
     context.textBaseline = 'top';
     text(scoreLabel(state.score), 24, 18, 30, PALETTE.text, 'left', '700');
     // Combo multiplier with its decay bar.
@@ -519,7 +519,17 @@ export function createRenderer(canvas) {
     // Controls hint, first seconds of play.
     if (screen === SCREEN_PLAY && state.hintTimer > 0 && state.wave === 1 && state.time < 8) {
       context.globalAlpha = Math.min(1, state.hintTimer);
-      text('WASD / arrows to move · mouse to aim · hold click or Space to fire · Shift to dash', FIELD.width / 2, FIELD.height - 64, 18, PALETTE.muted, 'center');
+      const touch = ui.touch && ui.touch.hasTouch;
+      text(
+        touch
+          ? 'Drag the left side to move · the ship fires on its own · tap DASH to dash'
+          : 'WASD / arrows to move · mouse to aim · hold click or Space to fire · Shift to dash',
+        FIELD.width / 2,
+        FIELD.height - 64,
+        18,
+        PALETTE.muted,
+        'center',
+      );
       context.globalAlpha = 1;
     }
   }
@@ -584,38 +594,97 @@ export function createRenderer(canvas) {
       context.fillRect(-40, -40, FIELD.width + 80, FIELD.height + 80);
     }
     if (screen === SCREEN_TITLE) {
+      const touch = ui.touch && ui.touch.hasTouch;
       drawPanel(
         'LUMENFALL',
-        [
-          'The last star is dying. You are its keeper.',
-          'Blast the void creatures. Gather starshards to raise your combo.',
-          'WASD / arrows move · mouse aims · hold click or Space to fire',
-          'Shift or right-click to dash through danger · P pauses · M mutes',
-          'Clear all 10 waves to relight the star. Then keep going, endless.',
-          bestLabel(best),
-        ],
-        'Press Space or click to start',
+        touch
+          ? [
+              'The last star is dying. You are its keeper.',
+              'Blast the void creatures. Gather starshards to raise your combo.',
+              'Drag the left side to move · the ship fires on its own',
+              'Tap the DASH button to dash through danger',
+              'Clear all 10 waves to relight the star. Then keep going, endless.',
+              bestLabel(best),
+            ]
+          : [
+              'The last star is dying. You are its keeper.',
+              'Blast the void creatures. Gather starshards to raise your combo.',
+              'WASD / arrows move · mouse aims · hold click or Space to fire',
+              'Shift or right-click to dash through danger · P pauses · M mutes',
+              'Clear all 10 waves to relight the star. Then keep going, endless.',
+              bestLabel(best),
+            ],
+        touch ? 'Tap to start' : 'Press Space or click to start',
         PALETTE.gold,
       );
       return;
     }
-    drawHud(state, screen, muted);
+    drawHud(state, screen, muted, ui);
+    if (screen === SCREEN_PLAY) drawTouchControls(state, ui);
     if (screen === SCREEN_PAUSED) {
       drawPanel('Paused', ['The void waits for you.'], 'Press P to resume');
     } else if (screen === SCREEN_OVER) {
+      const touch = ui.touch && ui.touch.hasTouch;
       drawPanel(
         'The light fades',
         [finalLabel(state.score), bestLabel(best), 'Wave reached: ' + state.wave, 'Void creatures destroyed: ' + state.kills],
-        'Press Space or R to try again',
+        touch ? 'Tap to try again' : 'Press Space or R to try again',
         PALETTE.danger,
       );
     } else if (screen === SCREEN_WIN) {
+      const touch = ui.touch && ui.touch.hasTouch;
       drawPanel(
         'THE STAR REIGNITES',
         [finalLabel(state.score), bestLabel(best), 'All 10 waves cleared. The light is yours.', ''],
-        'Space: keep going, endless · R: start over',
+        touch ? 'Tap: keep going, endless' : 'Space: keep going, endless · R: start over',
         PALETTE.gold,
       );
+    }
+  }
+
+  /** The on-screen touch controls: the analog stick where the finger is, and the dash button. */
+  function drawTouchControls(state, ui) {
+    const t = ui.touch;
+    if (!t || !t.hasTouch) return;
+    // Dash button, bottom-right; its ring is bright when the dash is ready.
+    const db = t.dashButton;
+    const ready = state.player.dashCd <= 0;
+    context.beginPath();
+    context.arc(db.x, db.y, db.r, 0, TAU);
+    context.fillStyle = t.dashPressed ? 'rgba(57, 213, 255, 0.35)' : 'rgba(57, 213, 255, 0.14)';
+    context.fill();
+    context.lineWidth = 3;
+    context.strokeStyle = ready ? 'rgba(57, 213, 255, 0.9)' : 'rgba(57, 213, 255, 0.35)';
+    context.stroke();
+    // Lightning bolt inside the button.
+    context.beginPath();
+    context.moveTo(db.x + 6, db.y - 24);
+    context.lineTo(db.x - 12, db.y + 2);
+    context.lineTo(db.x - 1, db.y + 2);
+    context.lineTo(db.x - 6, db.y + 24);
+    context.lineTo(db.x + 12, db.y - 2);
+    context.lineTo(db.x + 1, db.y - 2);
+    context.closePath();
+    context.fillStyle = ready ? '#39d5ff' : 'rgba(57, 213, 255, 0.5)';
+    context.fill();
+    text('DASH', db.x, db.y + db.r + 20, 15, ready ? PALETTE.over : PALETTE.muted, 'center', '700');
+    // Analog stick: a base ring where the finger landed and a knob that follows the drag.
+    if (t.joystick) {
+      const j = t.joystick;
+      context.beginPath();
+      context.arc(j.baseX, j.baseY, 72, 0, TAU);
+      context.fillStyle = 'rgba(255, 255, 255, 0.08)';
+      context.fill();
+      context.lineWidth = 2;
+      context.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+      context.stroke();
+      context.beginPath();
+      context.arc(j.knobX, j.knobY, 30, 0, TAU);
+      context.fillStyle = 'rgba(255, 215, 106, 0.35)';
+      context.fill();
+      context.lineWidth = 2;
+      context.strokeStyle = 'rgba(255, 215, 106, 0.8)';
+      context.stroke();
     }
   }
 
